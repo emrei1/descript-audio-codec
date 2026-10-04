@@ -27,7 +27,7 @@ jobs:
 
       - name: Linux packages
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y xdg-utils shared-mime-info desktop-file-utils
+        run: sudo apt-get update && sudo apt-get install -y xdg-utils shared-mime-info desktop-file-utils libglib2.0-bin
 
       - name: Configure
         run: cmake -S native -B build -DCMAKE_BUILD_TYPE=Release
@@ -68,8 +68,11 @@ jobs:
 
       - name: File association (Linux)
         if: runner.os == 'Linux'
+        env:
+          XDG_CURRENT_DESKTOP: GNOME   # headless runner: make xdg-mime use the shared-mime-info database
         run: |
           build/dac-player --register
+          grep -q "audio/x-dac:\*.dac" ~/.local/share/mime/globs2
           printf '\x93NUMPY' > /tmp/test.dac
           test "$(xdg-mime query filetype /tmp/test.dac)" = "audio/x-dac"
           test "$(xdg-mime query default audio/x-dac)" = "dac-player.desktop"

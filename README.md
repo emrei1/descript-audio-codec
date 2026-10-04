@@ -131,6 +131,14 @@ dependencies.
     ```
 
 
+## Native CPU codec and desktop player
+
+[`native/`](native/) contains a C++ implementation of the 44 kHz codec (encoder, quantizer and
+decoder) that runs several times faster than real time on a laptop CPU, reproduces
+`compress` / `decompress` (identical codes, decoder SNR > 100 dB vs PyTorch) and reads/writes
+`.dac` files. It also installs a file handler on Windows, Linux and macOS, so double-clicking a
+`.dac` file plays it in the system media player. See [native/README.md](native/README.md).
+
 ## Training
 The baseline model configuration can be trained using the following commands.
 

@@ -1,0 +1,94 @@
+name: native
+
+on:
+  push:
+    paths: ["native/**", "dac/**", ".github/workflows/native.yml"]
+  pull_request:
+    paths: ["native/**", "dac/**", ".github/workflows/native.yml"]
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, name: linux-x64-onednn }
+          - { os: windows-2022, name: windows-x64-onednn }
+          - { os: macos-14, name: macos-arm64-accelerate }
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xdg-utils shared-mime-info desktop-file-utils
+
+      - name: Configure
+        run: cmake -S native -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Locate binaries
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then echo "NATIVE=build/Release/dac-native.exe" >> $GITHUB_ENV
+          else echo "NATIVE=build/dac-native" >> $GITHUB_ENV; fi
+
+      - name: Install the Python reference
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then pip install torch torchaudio
+          else pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu; fi
+          pip install -e .
+
+      - name: Cache converted weights
+        uses: actions/cache@v4
+        with:
+          path: dac.gguf
+          key: dac-gguf-44khz-${{ hashFiles('native/scripts/convert_weights.py') }}
+
+      - name: Convert weights
+        shell: bash
+        run: test -f dac.gguf || python native/scripts/convert_weights.py -o dac.gguf
+
+      - name: Benchmark
+        shell: bash
+        run: $NATIVE bench --model dac.gguf
+
+      - name: Compare with PyTorch (encode, decode, .dac interop)
+        shell: bash
+        run: python native/tests/compare_with_python.py --native $NATIVE --model dac.gguf
+
+      - name: File association (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          build/dac-player --register
+          printf '\x93NUMPY' > /tmp/test.dac
+          test "$(xdg-mime query filetype /tmp/test.dac)" = "audio/x-dac"
+          test "$(xdg-mime query default audio/x-dac)" = "dac-player.desktop"
+          build/dac-player --unregister
+
+      - name: App bundle (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          plutil -lint "build/DAC Player.app/Contents/Info.plist"
+          test -x "build/DAC Player.app/Contents/MacOS/DAC Player"
+          /usr/libexec/PlistBuddy -c "Print :UTExportedTypeDeclarations:0:UTTypeIdentifier" "build/DAC Player.app/Contents/Info.plist"
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: dac-native-${{ matrix.name }}
+          path: |
+            build/dac-native
+            build/dac-player
+            build/Release/*.exe
+            build/DAC Player.app
+          if-no-files-found: ignore

@@ -33,7 +33,7 @@ jobs:
         run: cmake -S native -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --config Release --parallel 4
 
       - name: Locate binaries
         shell: bash

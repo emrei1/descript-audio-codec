@@ -39,6 +39,11 @@ def synth(sr, seconds, channels, seed=0):
     return np.stack(out, 1).astype(np.float32)
 
 
+def scalar(x):
+    """input_db is a 1-element array (numpy) or tensor (torch); numpy 2 refuses float() on it."""
+    return float(np.asarray(x, dtype=np.float64).reshape(-1)[0])
+
+
 def snr(ref, test):
     n = min(len(ref), len(test))
     e = ref[:n] - test[:n]
@@ -90,7 +95,7 @@ def main():
         match = float((f_nat.codes == f_py.codes).float().mean()) if same_shape else 0.0
         meta_ok = all(getattr(f_nat, k) == getattr(f_py, k) for k in
                       ["chunk_length", "original_length", "channels", "sample_rate", "padding"])
-        db_diff = abs(float(f_nat.input_db) - float(f_py.input_db))
+        db_diff = abs(scalar(f_nat.input_db) - scalar(f_py.input_db))
         py_from_native = model.decompress(f_nat).audio_data[0].numpy().T   # Python decodes native codes
 
         nat_wav = os.path.join(tmp, name + "_native.wav")
